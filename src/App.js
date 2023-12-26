@@ -10,6 +10,27 @@ const App = () => {
   const [beatsPerMeasure, setBeatsPerMeasure] = useState(4);
   const randomIndex = Math.floor(Math.random() * scale.length);
   const note = scale[randomIndex];
+  const [currentNote, setCurrentNote] = useState(null);
+  const frequencyToMidiNoteNumber = (frequency) => {
+    return Math.round(69 + 12 * Math.log2(frequency / 440));
+  };
+  const noteNames = [
+    "C",
+    "C#",
+    "D",
+    "D#",
+    "E",
+    "F",
+    "F#",
+    "G",
+    "G#",
+    "A",
+    "A#",
+    "B",
+  ];
+  const midiNoteNumberToNoteName = (midiNoteNumber) => {
+    return noteNames[midiNoteNumber % 12] + Math.floor(midiNoteNumber / 12);
+  };
 
   const scales = {
     major: [0, 2, 4, 5, 7, 9, 11, 12],
@@ -34,6 +55,14 @@ const App = () => {
     enigmatic: [0, 1, 4, 6, 8, 10, 12],
   };
 
+  const [randomizedNotes, setRandomizedNotes] = useState([]);
+
+  const generateRandomizedNotes = () => {
+    const selectedScale = scales[scale];
+    const frequencies = generateScale(rootNote, selectedScale);
+    const randomized = [...frequencies].sort(() => Math.random() - 0.5);
+    setRandomizedNotes(randomized);
+  };
   const generateScale = (root, intervals) => {
     return intervals.map((interval) => root * Math.pow(2, interval / 12));
   };
@@ -50,23 +79,39 @@ const App = () => {
     }, (60 / tempo) * 1000); // stop after one beat
   };
   useEffect(() => {
-    if (playing) {
+    if (playing && randomizedNotes.length > 0) {
       const interval = setInterval(() => {
-        setCount((prevCount) => (prevCount + 1) % beatsPerMeasure);
-        const selectedScale = scales[scale];
-        const frequencies = generateScale(rootNote, selectedScale);
-        const randomIndex = Math.floor(Math.random() * frequencies.length);
-        const frequency = frequencies[randomIndex];
-        play(frequency);
+        setCount((prevCount) => {
+          const newCount = (prevCount + 1) % beatsPerMeasure;
+          const note = randomizedNotes[newCount];
+          play(note);
+          setCurrentNote(
+            midiNoteNumberToNoteName(frequencyToMidiNoteNumber(note))
+          );
+          return newCount;
+        });
       }, (60 / tempo) * 1000);
       return () => clearInterval(interval);
     }
-  }, [playing, tempo, beatsPerMeasure, scale, rootNote, scales]);
+  }, [
+    playing,
+    tempo,
+    beatsPerMeasure,
+    scale,
+    rootNote,
+    scales,
+    randomizedNotes,
+  ]);
+
+  useEffect(() => {
+    generateRandomizedNotes();
+  }, [scale, rootNote]);
 
   return (
     <div>
       <h1>Metronome</h1>
       <p>Current Beat: {count + 1}</p>
+      <p>Current Note: {currentNote}</p>
       <div>
         {[...Array(beatsPerMeasure)].map((_, i) => (
           <div
@@ -95,6 +140,7 @@ const App = () => {
       >
         {playing ? "Stop" : "Start"}
       </button>
+      <button onClick={generateRandomizedNotes}>Shuffle</button>
       <div>
         <label>Beats per Measure: </label>
         <input

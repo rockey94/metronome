@@ -7,7 +7,9 @@ const App = () => {
   const [tempo, setTempo] = useState(120);
   const [scale, setScale] = useState("major");
   const [rootNote, setRootNote] = useState(440); // A4
-  const beatsPerMeasure = 8;
+  const [beatsPerMeasure, setBeatsPerMeasure] = useState(4);
+  const randomIndex = Math.floor(Math.random() * scale.length);
+  const note = scale[randomIndex];
 
   const scales = {
     major: [0, 2, 4, 5, 7, 9, 11, 12],
@@ -35,38 +37,31 @@ const App = () => {
   const generateScale = (root, intervals) => {
     return intervals.map((interval) => root * Math.pow(2, interval / 12));
   };
-
-  useEffect(() => {
+  const play = (frequency) => {
     const audioContext = new (window.AudioContext ||
       window.webkitAudioContext)();
-    let oscillator = null;
-
-    const interval = setInterval(() => {
-      if (playing) {
-        setCount((prevCount) => {
-          const nextCount = (prevCount + 1) % beatsPerMeasure;
-          const currentScale = generateScale(rootNote, scales[scale]);
-          if (Number.isFinite(currentScale[nextCount])) {
-            oscillator = audioContext.createOscillator();
-            oscillator.frequency.value = currentScale[nextCount];
-            oscillator.connect(audioContext.destination);
-            oscillator.start();
-            oscillator.stop(audioContext.currentTime + 0.1);
-          } else {
-            console.error("Invalid frequency:", currentScale[nextCount]);
-          }
-          return nextCount;
-        });
-      }
-    }, (60 / tempo) * 1000);
-
-    return () => {
-      clearInterval(interval);
-      if (oscillator) {
-        oscillator.stop();
-      }
-    };
-  }, [playing, tempo, scale, rootNote]);
+    const oscillator = audioContext.createOscillator();
+    oscillator.type = "sine";
+    oscillator.frequency.value = frequency;
+    oscillator.connect(audioContext.destination);
+    oscillator.start();
+    setTimeout(() => {
+      oscillator.stop();
+    }, (60 / tempo) * 1000); // stop after one beat
+  };
+  useEffect(() => {
+    if (playing) {
+      const interval = setInterval(() => {
+        setCount((prevCount) => (prevCount + 1) % beatsPerMeasure);
+        const selectedScale = scales[scale];
+        const frequencies = generateScale(rootNote, selectedScale);
+        const randomIndex = Math.floor(Math.random() * frequencies.length);
+        const frequency = frequencies[randomIndex];
+        play(frequency);
+      }, (60 / tempo) * 1000);
+      return () => clearInterval(interval);
+    }
+  }, [playing, tempo, beatsPerMeasure, scale, rootNote, scales]);
 
   return (
     <div>
@@ -100,6 +95,16 @@ const App = () => {
       >
         {playing ? "Stop" : "Start"}
       </button>
+      <div>
+        <label>Beats per Measure: </label>
+        <input
+          type="number"
+          min="4"
+          max="16"
+          value={beatsPerMeasure}
+          onChange={(e) => setBeatsPerMeasure(Number(e.target.value))}
+        />
+      </div>
       <div>
         <label>Tempo: </label>
         <input

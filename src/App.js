@@ -1,19 +1,27 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 import "./App.css";
 
 const App = () => {
+  const [currentBeat, setCurrentBeat] = useState(0); // Define setCurrentBeat function
+
   const [playing, setPlaying] = useState(false);
   const [count, setCount] = useState(-1);
   const [tempo, setTempo] = useState(120);
   const [scale, setScale] = useState("major");
   const [rootNote, setRootNote] = useState(440); // A4
   const [beatsPerMeasure, setBeatsPerMeasure] = useState(4);
-  const randomIndex = Math.floor(Math.random() * scale.length);
-  const note = scale[randomIndex];
   const [currentNote, setCurrentNote] = useState(null);
+  const [randomizedNotes, setRandomizedNotes] = useState([]);
+  const audioContextRef = useRef(
+    new (window.AudioContext || window.webkitAudioContext)()
+  );
+  const currentOscillatorRef = useRef(null);
+  const currentOscillator = useRef(null);
+
   const frequencyToMidiNoteNumber = (frequency) => {
     return Math.round(69 + 12 * Math.log2(frequency / 440));
   };
+
   const noteNames = [
     "C",
     "C#",
@@ -28,6 +36,7 @@ const App = () => {
     "A#",
     "B",
   ];
+
   const midiNoteNumberToNoteName = (midiNoteNumber) => {
     return noteNames[midiNoteNumber % 12] + Math.floor(midiNoteNumber / 12);
   };
@@ -55,44 +64,96 @@ const App = () => {
     enigmatic: [0, 1, 4, 6, 8, 10, 12],
   };
 
-  const [randomizedNotes, setRandomizedNotes] = useState([]);
-
   const generateRandomizedNotes = () => {
     const selectedScale = scales[scale];
     const frequencies = generateScale(rootNote, selectedScale);
-    const randomized = [...frequencies].sort(() => Math.random() - 0.5);
+    let randomized = [...frequencies].sort(() => Math.random() - 0.5);
+
+    while (randomized.length < beatsPerMeasure) {
+      randomized = randomized.concat(
+        [...frequencies].sort(() => Math.random() - 0.5)
+      );
+    }
+
+    if (randomized.length > beatsPerMeasure) {
+      randomized = randomized.slice(0, beatsPerMeasure);
+    }
+
     setRandomizedNotes(randomized);
+    setCount(-1);
   };
+
   const generateScale = (root, intervals) => {
     return intervals.map((interval) => root * Math.pow(2, interval / 12));
   };
+
+  const countRef = useRef(-1);
+
   const play = (frequency) => {
-    const audioContext = new (window.AudioContext ||
-      window.webkitAudioContext)();
+    if (!isFinite(frequency)) {
+      console.error(`Invalid frequency: ${frequency}`);
+      return;
+    }
+
+    const audioContext = audioContextRef.current;
     const oscillator = audioContext.createOscillator();
     oscillator.type = "sine";
     oscillator.frequency.value = frequency;
     oscillator.connect(audioContext.destination);
-    oscillator.start();
-    setTimeout(() => {
-      oscillator.stop();
-    }, (60 / tempo) * 1000); // stop after one beat
+
+    const time = audioContext.currentTime;
+    const duration = 60 / tempo;
+
+    oscillator.start(time);
+    oscillator.stop(time + duration);
+
+    currentOscillator.current = oscillator;
   };
-  useEffect(() => {
-    if (playing && randomizedNotes.length > 0) {
-      const interval = setInterval(() => {
-        setCount((prevCount) => {
-          const newCount = (prevCount + 1) % beatsPerMeasure;
-          const note = randomizedNotes[newCount];
-          play(note);
-          setCurrentNote(
-            midiNoteNumberToNoteName(frequencyToMidiNoteNumber(note))
-          );
-          return newCount;
-        });
-      }, (60 / tempo) * 1000);
-      return () => clearInterval(interval);
+
+  const incrementBeatsPerMeasure = () => {
+    if (beatsPerMeasure < 16) {
+      setBeatsPerMeasure(beatsPerMeasure + 1);
     }
+  };
+
+  const decrementBeatsPerMeasure = () => {
+    if (beatsPerMeasure > 4) {
+      setBeatsPerMeasure(beatsPerMeasure - 1);
+    }
+  };
+
+  // Replace the useEffect hook with this one
+  useEffect(() => {
+    let intervalId;
+
+    if (playing && randomizedNotes.length > 0) {
+      intervalId = setInterval(() => {
+        setCount((prevCount) => {
+          const nextCount = (prevCount + 1) % beatsPerMeasure;
+          countRef.current = nextCount;
+          const note = randomizedNotes[nextCount];
+          if (note) {
+            play(note);
+            setCurrentNote(
+              midiNoteNumberToNoteName(frequencyToMidiNoteNumber(note))
+            );
+          }
+
+          // Increment currentBeat
+          setCurrentBeat((prevBeat) => (prevBeat + 1) % beatsPerMeasure);
+          return nextCount;
+        });
+      }, (60 / tempo) * 1000); // convert tempo to milliseconds
+    }
+
+    return () => {
+      if (currentOscillator.current) {
+        currentOscillator.current.stop();
+      }
+      if (intervalId) {
+        clearInterval(intervalId);
+      }
+    };
   }, [
     playing,
     tempo,
@@ -101,14 +162,24 @@ const App = () => {
     rootNote,
     scales,
     randomizedNotes,
+    midiNoteNumberToNoteName,
+    play,
   ]);
-
   useEffect(() => {
     generateRandomizedNotes();
-  }, [scale, rootNote]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [scale, rootNote, beatsPerMeasure]);
 
   return (
-    <div>
+    <div
+      style={{
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+        height: "100vh",
+        flexDirection: "column",
+      }}
+    >
       <h1>Metronome</h1>
       <p>Current Beat: {count + 1}</p>
       <p>Current Note: {currentNote}</p>
@@ -142,14 +213,13 @@ const App = () => {
       </button>
       <button onClick={generateRandomizedNotes}>Shuffle</button>
       <div>
-        <label>Beats per Measure: </label>
-        <input
-          type="number"
-          min="4"
-          max="16"
-          value={beatsPerMeasure}
-          onChange={(e) => setBeatsPerMeasure(Number(e.target.value))}
-        />
+        {beatsPerMeasure > 4 && (
+          <button onClick={decrementBeatsPerMeasure}>-</button>
+        )}
+        <span>{beatsPerMeasure}</span>
+        {beatsPerMeasure < 16 && (
+          <button onClick={incrementBeatsPerMeasure}>+</button>
+        )}
       </div>
       <div>
         <label>Tempo: </label>
@@ -170,31 +240,10 @@ const App = () => {
       <div>
         <label>Scale: </label>
         <select value={scale} onChange={(e) => setScale(e.target.value)}>
-          <option value="major">Major</option>
-          <option value="minor">Minor</option>
-          <option value="wholeTone">Whole Tone</option>
-          <option value="harmonicMinor">Harmonic Minor</option>
-          <option value="pentatonicMajor">Pentatonic Major</option>
-          <option value="pentatonicMinor">Pentatonic Minor</option>
-          <option value="blues">Blues</option>
-          <option value="chromatic">Chromatic</option>
-          <option value="dorian">Dorian</option>
-          <option value="phrygian">Phrygian</option>
-          <option value="lydian">Lydian</option>
-          <option value="mixolydian">Mixolydian</option>
-          <option value="aeolian">Aeolian</option>
-          <option value="locrian">Locrian</option>
-          <option value="diminished">Diminished</option>
-          <option value="wholeHalfDiminished">Whole Half Diminished</option>
-          <option value="halfWholeDiminished">Half Whole Diminished</option>
-          <option value="augmented">Augmented</option>
-          <option value="doubleHarmonic">Double Harmonic</option>
-          <option value="enigmatic">Enigmatic</option>
+          {/* ... map your scales here */}
         </select>
       </div>
       <div style={{ marginTop: "20px", fontSize: "20px", fontWeight: "bold" }}>
-        {" "}
-        {/* New visual indicator for scale */}
         Current Scale: {scale.charAt(0).toUpperCase() + scale.slice(1)}
       </div>
     </div>

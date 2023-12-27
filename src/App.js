@@ -21,7 +21,20 @@ const App = () => {
   const frequencyToMidiNoteNumber = (frequency) => {
     return Math.round(69 + 12 * Math.log2(frequency / 440));
   };
-
+  const notes = {
+    C: 261.63,
+    "C#": 277.18,
+    D: 293.66,
+    "D#": 311.13,
+    E: 329.63,
+    F: 349.23,
+    "F#": 369.99,
+    G: 392.0,
+    "G#": 415.3,
+    A: 440.0,
+    "A#": 466.16,
+    B: 493.88,
+  };
   const noteNames = [
     "C",
     "C#",
@@ -97,7 +110,7 @@ const App = () => {
 
     const audioContext = audioContextRef.current;
     const oscillator = audioContext.createOscillator();
-    oscillator.type = "sine";
+    oscillator.type = "sawtooth";
     oscillator.frequency.value = frequency;
     oscillator.connect(audioContext.destination);
 
@@ -231,16 +244,40 @@ const App = () => {
       </div>
       <div>
         <label>Root Note: </label>
-        <input
-          type="number"
+        <select
           value={rootNote}
-          onChange={(e) => setRootNote(e.target.value)}
-        />
+          onChange={(e) => setRootNote(notes[e.target.value])}
+        >
+          {Object.keys(notes).map((note) => (
+            <option key={note} value={note}>
+              {note}
+            </option>
+          ))}
+        </select>
       </div>
       <div>
         <label>Scale: </label>
         <select value={scale} onChange={(e) => setScale(e.target.value)}>
-          {/* ... map your scales here */}
+          <option value="major">Major</option>
+          <option value="minor">Minor</option>
+          <option value="wholeTone">Whole Tone</option>
+          <option value="harmonicMinor">Harmonic Minor</option>
+          <option value="pentatonicMajor">Pentatonic Major</option>
+          <option value="pentatonicMinor">Pentatonic Minor</option>
+          <option value="blues">Blues</option>
+          <option value="chromatic">Chromatic</option>
+          <option value="dorian">Dorian</option>
+          <option value="phrygian">Phrygian</option>
+          <option value="lydian">Lydian</option>
+          <option value="mixolydian">Mixolydian</option>
+          <option value="aeolian">Aeolian</option>
+          <option value="locrian">Locrian</option>
+          <option value="diminished">Diminished</option>
+          <option value="wholeHalfDiminished">Whole Half Diminished</option>
+          <option value="halfWholeDiminished">Half Whole Diminished</option>
+          <option value="augmented">Augmented</option>
+          <option value="doubleHarmonic">Double Harmonic</option>
+          <option value="enigmatic">Enigmatic</option>{" "}
         </select>
       </div>
       <div style={{ marginTop: "20px", fontSize: "20px", fontWeight: "bold" }}>
